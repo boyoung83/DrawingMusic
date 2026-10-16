@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="물감(악기)을 골라 선을 그리면 가로는 시간, 세로는 음계로 바뀌어 반복 연주되는 그림 악보.">
+<title>그림악보</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 22c5-12 9-12 12-4s7 8 12-6' fill='none' stroke='%232443D0' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen instrument. Transport across the top, pigment rail on the left, manuscript sheet fills the rest. */
+:root {
+  --paper: #E9EDF2;
+  --sheet: #F9FAFB;
+  --ink: #17202C;
+  --muted: #5B6677;
+  --rule: #DCE2EA;
+  --rule-strong: #B3BECC;
+  --band: #EDF1F8;
+  --hover: rgba(23, 32, 44, .05);
+  --p-ultra: #2443D0;
+  --p-cad: #D9481F;
+  --p-viri: #12806A;
+  --p-violet: #7A3A9E;
+  --p-ochre: #C08708;
+  --font-display: "Hahmlet", "Nanum Myeongjo", "AppleMyungjo", serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0D1117; --sheet: #141A23; --ink: #E4E9F0; --muted: #8D98AA;
+    --rule: #222A36; --rule-strong: #364152; --band: #19202C; --hover: rgba(228, 233, 240, .06);
+    --p-ultra: #7B90FF; --p-cad: #FF7752; --p-viri: #3FC7A2; --p-violet: #BC86E6; --p-ochre: #F2BE41;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0D1117; --sheet: #141A23; --ink: #E4E9F0; --muted: #8D98AA;
+  --rule: #222A36; --rule-strong: #364152; --band: #19202C; --hover: rgba(228, 233, 240, .06);
+  --p-ultra: #7B90FF; --p-cad: #FF7752; --p-viri: #3FC7A2; --p-violet: #BC86E6; --p-ochre: #F2BE41;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+* { box-sizing: border-box; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--p-ultra); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  padding-block: 14px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ── Top bar ─────────────────────────────── */
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 28px; }
+.brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-width: 0; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 30px; line-height: 1; letter-spacing: -.02em; }
+.brand p { margin: 0; color: var(--muted); font-size: 13px; }
+
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.play {
+  width: 48px; height: 48px; flex: none; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--ink); color: var(--sheet); display: grid; place-items: center;
+  transition: transform .12s ease;
+}
+.play:active { transform: scale(.94); }
+.play svg { width: 18px; height: 18px; }
+.play .i-stop { display: none; }
+.play[aria-pressed="true"] .i-play { display: none; }
+.play[aria-pressed="true"] .i-stop { display: block; }
+
+.field { display: flex; align-items: center; gap: 8px; }
+.field > span { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+select {
+  background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 6px;
+  padding: 6px 8px; font-size: 13px; cursor: pointer;
+}
+input[type="range"] { width: 112px; accent-color: var(--ink); }
+output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 3ch; }
+
+/* ── Stage ───────────────────────────────── */
+.stage { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 16px; min-height: 0; }
+
+.rail { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow-y: auto; }
+.group-label { margin: 0 0 6px 10px; font-size: 11px; font-weight: 500; letter-spacing: .1em; color: var(--muted); }
+.pigments, .tools { display: flex; flex-direction: column; gap: 2px; }
+
+.pig, .tool {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  width: 100%; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px;
+  background: none; text-align: left; cursor: pointer;
+}
+.pig:hover, .tool:hover { background: var(--hover); }
+.pig[aria-checked="true"], .tool[aria-pressed="true"] { background: var(--sheet); border-color: var(--rule-strong); }
+.sw { width: 28px; height: 13px; border-radius: 8px 3px 9px 4px; background: var(--c); transform: rotate(-7deg); }
+.pig[aria-checked="true"] .sw { box-shadow: 0 0 0 3px var(--sheet), 0 0 0 4px var(--c); }
+.pn { display: block; font-weight: 600; font-size: 13.5px; }
+.pi { display: block; font-size: 12px; color: var(--muted); }
+.tool svg { width: 18px; height: 18px; justify-self: center; color: var(--muted); }
+.tool span { font-size: 13.5px; }
+kbd {
+  font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+  border: 1px solid var(--rule-strong); border-radius: 4px; padding: 0 5px; line-height: 18px;
+}
+
+.switch { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; font-size: 13.5px; }
+.switch input { width: 16px; height: 16px; accent-color: var(--ink); margin: 0 6px; }
+
+.legend { margin: 0; padding: 12px 10px 0; border-top: 1px solid var(--rule); display: grid; gap: 6px; font-size: 12px; }
+.legend div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; }
+.legend dt { color: var(--muted); }
+.legend dd { margin: 0; }
+
+.sheet {
+  position: relative; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto;
+  background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 10px; overflow: hidden;
+}
+.canvas-box { position: relative; min-height: 0; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+canvas.erase { cursor: cell; }
+
+.readout {
+  display: flex; flex-wrap: wrap; gap: 2px 18px; padding: 8px 14px;
+  border-top: 1px solid var(--rule); font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.readout b { color: var(--ink); font-weight: 500; }
+
+.hint {
+  position: absolute; top: 6px; right: 10px; max-width: calc(100% - 20px);
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--muted);
+  background: var(--sheet); border: 1px solid var(--rule); pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .app { height: auto; min-height: 100%; }
+  .brand h1 { font-size: 26px; }
+  .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(400px, 1fr); }
+  .rail { overflow: visible; flex-direction: row; flex-wrap: wrap; gap: 8px 12px; }
+  .group-label, .legend, kbd, .pn { display: none; }
+  .pigments, .tools { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .pig, .tool { width: auto; grid-template-columns: auto auto; gap: 8px; padding: 6px 10px; }
+  .sw { width: 22px; height: 11px; }
+  .pi { font-size: 13px; color: var(--ink); }
+  .tool span { display: none; }
+  .tool { grid-template-columns: auto; }
+  .switch span { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .play { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <h1>그림악보</h1>
+      <p>그린 선이 그대로 선율이 됩니다</p>
+    </div>
+    <div class="transport">
+      <button id="play" class="play" type="button" aria-pressed="false" aria-label="재생 (스페이스)">
+        <svg class="i-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>
+        <svg class="i-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+      </button>
+      <label class="field" for="bpm"><span>템포</span>
+        <input id="bpm" type="range" min="60" max="160" step="1" value="92">
+        <output id="bpmOut" for="bpm">92</output>
+      </label>
+      <label class="field" for="key"><span>으뜸음</span><select id="key"></select></label>
+      <label class="field" for="scale"><span>음계</span><select id="scale"></select></label>
+    </div>
+  </header>
+
+  <main class="stage">
+    <aside class="rail">
+      <div>
+        <p class="group-label" id="pigLabel">물감 · 악기</p>
+        <div class="pigments" role="radiogroup" aria-labelledby="pigLabel" id="pigments"></div>
+      </div>
+      <div>
+        <p class="group-label">도구</p>
+        <div class="tools">
+          <button class="tool" id="eraser" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4.5l5 5-9 9H6l-2.5-2.5a1.5 1.5 0 010-2.1z"/><path d="M9 10l5 5M10.5 18.5H20"/></svg>
+            <span>지우개</span><kbd>E</kbd>
+          </button>
+          <button class="tool" id="undo" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>
+            <span>되돌리기</span><kbd>⌘Z</kbd>
+          </button>
+          <button class="tool" id="clear" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12M9 7V4h6v3"/></svg>
+            <span>모두 지우기</span><span></span>
+          </button>
+          <label class="switch" for="showNotes"><input id="showNotes" type="checkbox" checked><span>음표 칸 보기</span></label>
+        </div>
+      </div>
+      <dl class="legend">
+        <div><dt>가로</dt><dd>시간. 2마디, 16분음표 32칸을 반복합니다</dd></div>
+        <div><dt>세로</dt><dd>음높이. 고른 음계의 음에만 맞춰집니다</dd></div>
+        <div><dt>세로 획</dt><dd>한 칸 안에서 세 음 이상 걸치면 화음</dd></div>
+        <div><dt>점</dt><dd>짧게 한 번 치는 음</dd></div>
+        <div><dt>황토색</dt><dd>높이로 타악기를 고릅니다. 아래부터 킥, 스네어, 하이햇, 오픈햇</dd></div>
+      </dl>
+    </aside>
+
+    <section class="sheet" aria-label="악보 캔버스">
+      <div class="canvas-box">
+        <canvas id="score" aria-label="그림을 그리면 음표가 되는 캔버스"></canvas>
+        <div class="hint" id="hint">예시 그림입니다. ▶ 눌러 들어보고, 덧그리거나 지우고 시작하세요</div>
+      </div>
+      <div class="readout" id="readout"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ── Musical model ───────────────────────────────────────────
+  const COLS = 32, ROWS = 16, STEPS_PER_BAR = 16;
+  const DRUM = 4, ERASER = -1;
+  const INST = [
+    { id: 'piano',   pig: '--p-ultra',  name: '울트라마린', label: '피아노',   oct: 0,   max: 8,  gain: .9,  delay: .16, rev: .22 },
+    { id: 'marimba', pig: '--p-cad',    name: '카드뮴',     label: '마림바',   oct: 12,  max: 4,  gain: .8,  delay: .24, rev: .18 },
+    { id: 'pad',     pig: '--p-viri',   name: '비리디안',   label: '패드',     oct: 0,   max: 16, gain: .7,  delay: 0,   rev: .5 },
+    { id: 'bass',    pig: '--p-violet', name: '망간 바이올렛', label: '베이스', oct: -12, max: 8,  gain: .85, delay: 0,   rev: .04 },
+    { id: 'drums',   pig: '--p-ochre',  name: '옐로 오커',  label: '타악기',   oct: 0,   max: 1,  gain: .9,  delay: 0,   rev: .07 },
+  ];
+  const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const SCALES = [
+    { name: '메이저 펜타토닉', iv: [0, 2, 4, 7, 9] },
+    { name: '마이너 펜타토닉', iv: [0, 3, 5, 7, 10] },
+    { name: '평조 (국악)',     iv: [0, 2, 5, 7, 9] },
+    { name: '장음계',          iv: [0, 2, 4, 5, 7, 9, 11] },
+    { name: '자연단음계',      iv: [0, 2, 3, 5, 7, 8, 10] },
+    { name: '도리안',          iv: [0, 2, 3, 5, 7, 9, 10] },
+    { name: '블루스',          iv: [0, 3, 5, 6, 7, 10] },
+    { name: '미야코부시',      iv: [0, 1, 5, 7, 8] },
+  ];
+  const DRUM_ZONES = ['킥', '스네어', '하이햇', '오픈햇'];
+  const drumKind = r => Math.min(3, Math.floor(r / 4));
+
+  const state = { strokes: [], history: [], tool: 0, showNotes: true, bpm: 92, key: 0, scale: 0, example: true };
+  let notes = [], events = [];
+
+  const midiFor = (row, inst) => {
+    const iv = SCALES[state.scale].iv;
+    return 48 + state.key + 12 * Math.floor(row / iv.length) + iv[row % iv.length] + INST[inst].oct;
+  };
+  const noteLabel = m => NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
+  const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+  const stepDur = () => 60 / state.bpm / 4;
+  const cellOf = p => ({
+    c: Math.min(COLS - 1, Math.max(0, Math.floor(p.x * COLS))),
+    r: Math.min(ROWS - 1, Math.max(0, ROWS - 1 - Math.floor(p.y * ROWS))),
+  });
+
+  // Rows a stroke touches in each column. A column touched across 3+ rows is a chord;
+  // otherwise only the row nearest the column's centre counts, so lines read as melody.
+  function rowsByColumn(s) {
+    const cols = new Map();
+    const add = (x, y) => {
+      const { c, r } = cellOf({ x, y });
+      let e = cols.get(c);
+      if (!e) { e = { rows: new Set(), best: r, bd: Infinity }; cols.set(c, e); }
+      e.rows.add(r);
+      const d = Math.abs(x * COLS - (c + .5));
+      if (d < e.bd) { e.bd = d; e.best = r; }
+    };
+    const p = s.pts;
+    add(p[0].x, p[0].y);
+    for (let i = 1; i < p.length; i++) {
+      const a = p[i - 1], b = p[i];
+      const n = Math.ceil(Math.max(Math.abs(b.x - a.x) * COLS, Math.abs(b.y - a.y) * ROWS) * 3) + 1;
+      for (let k = 1; k <= n; k++) add(a.x + (b.x - a.x) * k / n, a.y + (b.y - a.y) * k / n);
+    }
+    const out = new Map();
+    for (const [c, e] of cols) out.set(c, e.rows.size >= 3 ? [...e.rows] : [e.best]);
+    return out;
+  }
+
+  function strokeToNotes(s) {
+    const byCol = rowsByColumn(s);
+    const order = [...byCol.keys()].sort((a, b) => a - b);
+    const max = INST[s.inst].max;
+    const out = [];
+    let open = new Map(), prev = -2;
+    for (const c of order) {
+      const next = new Map();
+      const contiguous = c === prev + 1;
+      for (const r of byCol.get(c)) {
+        const o = contiguous ? open.get(r) : null;
+        if (s.inst === DRUM) {
+          // A held drum line repeats on eighth notes.
+          if (!o || c % 2 === 0) out.push({ col: c, len: 1, row: r, inst: s.inst, s });
+          next.set(r, true);
+        } else if (o && o.len < max) {
+          o.len++; next.set(r, o);
+        } else {
+          const n = { col: c, len: 1, row: r, inst: s.inst, s };
+          out.push(n); next.set(r, n);
+        }
+      }
+      open = next; prev = c;
+    }
+    return out;
+  }
+
+  function rebuild() {
+    const seen = new Map();
+    for (const n of state.strokes.flatMap(strokeToNotes)) {
+      const k = n.col + '|' + n.row + '|' + n.inst;
+      const had = seen.get(k);
+      if (!had || had.len < n.len) seen.set(k, n);
+    }
+    notes = [...seen.values()];
+    events = Array.from({ length: COLS }, () => []);
+    for (const n of notes) events[n.col].push(n);
+    updateReadout();
+  }
+
+  // ── Audio engine (plain Web Audio, no samples) ──────────────
+  let ctx = null, master, delay, busses = [], noiseBuf, reverb;
+
+  function ensureAudio() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 4;
+    master = ctx.createGain(); master.gain.value = .8;
+    master.connect(comp).connect(ctx.destination);
+
+    reverb = ctx.createConvolver();
+    reverb.buffer = impulse(2.6);
+    reverb.connect(master);
+
+    delay = ctx.createDelay(2);
+    delay.delayTime.value = 3 * stepDur(); // dotted eighth
+    const fb = ctx.createGain(); fb.gain.value = .32;
+    const dlp = ctx.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
+    delay.connect(dlp); dlp.connect(fb).connect(delay);
+    const dOut = ctx.createGain(); dOut.gain.value = .6;
+    dlp.connect(dOut).connect(master);
+
+    busses = INST.map(i => {
+      const b = ctx.createGain(); b.gain.value = i.gain; b.connect(master);
+      if (i.delay) { const s = ctx.createGain(); s.gain.value = i.delay; b.connect(s).connect(delay); }
+      const r = ctx.createGain(); r.gain.value = i.rev; b.connect(r).connect(reverb);
+      return b;
+    });
+
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  function impulse(sec) {
+    const len = Math.floor(ctx.sampleRate * sec), buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    }
+    return buf;
+  }
+
+  const osc = (type, f, t, stop) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(stop); return o; };
+  const gain = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
+
+  function vPiano(f, t, d, v, bus) {
+    const end = t + d + 1.6, g = gain(0), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(5200, t); lp.frequency.exponentialRampToValueAtTime(900, t + .8);
+    osc('triangle', f, t, end).connect(lp);
+    osc('sine', f * 2, t, end).connect(gain(.28)).connect(lp);
+    lp.connect(g).connect(bus);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(.34 * v, t + .006);
+    g.gain.setTargetAtTime(.1 * v, t + .006, .3);
+    g.gain.setTargetAtTime(0, t + Math.max(d, .12), .12);
+  }
+  function vMarimba(f, t, d, v, bus) {
+    const end = t + 1.4, g = gain(0), g2 = gain(0);
+    osc('sine', f, t, end).connect(g).connect(bus);
+    osc('sine', f * 3.99, t, end).connect(g2).connect(bus);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.42 * v, t + .003); g.gain.setTargetAtTime(0, t + .003, .2);
+    g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(.12 * v, t + .002); g2.gain.setTargetAtTime(0, t + .002, .025);
+  }
+  function vPad(f, t, d, v, bus) {
+    const end = t + d + 2.2, g = gain(0), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = .6;
+    for (const cents of [-9, 0, 8]) {
+      const o = osc('sawtooth', f, t, end); o.detune.value = cents; o.connect(lp);
+    }
+    lp.connect(g).connect(bus);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(.055 * v, t + .22);
+    g.gain.setValueAtTime(.055 * v, t + d);
+    g.gain.setTargetAtTime(0, t + d, .4);
+  }
+  function vBass(f, t, d, v, bus) {
+    const end = t + d + .8, g = gain(0), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.Q.value = 5;
+    lp.frequency.setValueAtTime(1900, t); lp.frequency.setTargetAtTime(380, t, .09);
+    osc('sawtooth', f, t, end).connect(lp);
+    osc('sine', f / 2, t, end).connect(gain(.6)).connect(lp);
+    lp.connect(g).connect(bus);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(.32 * v, t + .008);
+    g.gain.setTargetAtTime(.22 * v, t + .008, .15);
+    g.gain.setTargetAtTime(0, t + Math.max(d - .02, .05), .05);
+  }
+  function noise(t, dur) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t); s.stop(t + dur); return s; }
+  function vDrum(kind, t, v, bus) {
+    if (kind === 0) {
+      const o = osc('sine', 160, t, t + .5), g = gain(0);
+      o.frequency.exponentialRampToValueAtTime(42, t + .13);
+      o.connect(g).connect(bus);
+      g.gain.setValueAtTime(.95 * v, t); g.gain.exponentialRampToValueAtTime(.001, t + .42);
+    } else if (kind === 1) {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = .7;
+      const g = gain(0); noise(t, .25).connect(bp).connect(g).connect(bus);
+      g.gain.setValueAtTime(.5 * v, t); g.gain.exponentialRampToValueAtTime(.001, t + .19);
+      const g2 = gain(0); osc('triangle', 190, t, t + .15).connect(g2).connect(bus);
+      g2.gain.setValueAtTime(.3 * v, t); g2.gain.exponentialRampToValueAtTime(.001, t + .09);
+    } else {
+      const open = kind === 3, hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7200;
+      const g = gain(0); noise(t, open ? .45 : .08).connect(hp).connect(g).connect(bus);
+      g.gain.setValueAtTime((open ? .2 : .24) * v, t); g.gain.exponentialRampToValueAtTime(.001, t + (open ? .38 : .05));
+    }
+  }
+  function voice(inst, row, t, d, v = 1) {
+    if (!ctx) return;
+    const bus = busses[inst];
+    if (inst === DRUM) return vDrum(drumKind(row), t, v, bus);
+    [vPiano, vMarimba, vPad, vBass][inst](mtof(midiFor(row, inst)), t, d, v, bus);
+  }
+
+  // ── Transport ───────────────────────────────────────────────
+  let playing = false, step = 0, nextTime = 0, timer = null, vq = [], curStep = -1, curStepTime = 0;
+  function scheduler() {
+    while (nextTime < ctx.currentTime + .12) {
+      const sd = stepDur();
+      for (const n of events[step]) voice(n.inst, n.row, nextTime, n.len * sd);
+      vq.push({ step, time: nextTime });
+      nextTime += sd;
+      step = (step + 1) % COLS;
+    }
+  }
+  function start() {
+    ensureAudio(); if (!ctx) return;
+    playing = true; step = 0; vq = []; curStep = -1;
+    nextTime = ctx.currentTime + .06;
+    scheduler(); timer = setInterval(scheduler, 25);
+    playBtn.setAttribute('aria-pressed', 'true'); playBtn.setAttribute('aria-label', '정지 (스페이스)');
+  }
+  function stop() {
+    playing = false; clearInterval(timer); vq = []; curStep = -1;
+    playBtn.setAttribute('aria-pressed', 'false'); playBtn.setAttribute('aria-label', '재생 (스페이스)');
+  }
+  const toggle = () => (playing ? stop() : start());
+
+  // ── Canvas ──────────────────────────────────────────────────
+  const cv = document.getElementById('score'), g = cv.getContext('2d');
+  let W = 0, H = 0, plot = { x: 0, y: 0, w: 1, h: 1 }, C = {};
+  function resize() {
+    const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const gl = W < 480 ? 40 : 50;
+    plot = { x: gl, y: 34, w: Math.max(1, W - gl - 14), h: Math.max(1, H - 34 - 14) };
+  }
+  new ResizeObserver(resize).observe(cv);
+
+  function readTheme() {
+    const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
+    C = { sheet: v('--sheet'), ink: v('--ink'), muted: v('--muted'), rule: v('--rule'), strong: v('--rule-strong'), band: v('--band'), pig: INST.map(i => v(i.pig)) };
+  }
+  readTheme();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readTheme);
+  new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  const toPx = p => [plot.x + p.x * plot.w, plot.y + p.y * plot.h];
+  const MONO = '"IBM Plex Mono", ui-monospace, monospace', BODY = '"IBM Plex Sans KR", system-ui, sans-serif';
+
+  let particles = [], drawing = null, erasing = null, hover = null;
+
+  function frame() {
+    const now = performance.now();
+    if (playing && ctx) {
+      while (vq.length && vq[0].time <= ctx.currentTime) {
+        const e = vq.shift();
+        curStep = e.step; curStepTime = e.time;
+        for (const n of events[e.step]) {
+          n.s.flash = now;
+          particles.push({ x: n.col + .5, r: n.row, inst: n.inst, t0: now });
+        }
+      }
+    }
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  function draw(now) {
+    const cw = plot.w / COLS, rh = plot.h / ROWS, drumView = state.tool === DRUM;
+    const scLen = SCALES[state.scale].iv.length;
+    g.fillStyle = C.sheet; g.fillRect(0, 0, W, H);
+
+    // Bands: tonic rows, or drum zones when the ochre pigment is selected.
+    g.fillStyle = C.band;
+    for (let r = 0; r < ROWS; r++) {
+      const on = drumView ? drumKind(r) % 2 === 1 : r % scLen === 0;
+      if (on) g.fillRect(plot.x, plot.y + (ROWS - 1 - r) * rh, plot.w, rh);
+    }
+    if (hover && !drawing && hover.inside) {
+      g.globalAlpha = .6; g.fillRect(plot.x, plot.y + (ROWS - 1 - hover.r) * rh, plot.w, rh); g.globalAlpha = 1;
+    }
+
+    // Staff-like row lines at row centres.
+    g.strokeStyle = C.rule; g.lineWidth = 1;
+    g.beginPath();
+    for (let r = 0; r < ROWS; r++) { const y = Math.round(plot.y + (r + .5) * rh) + .5; g.moveTo(plot.x, y); g.lineTo(plot.x + plot.w, y); }
+    g.stroke();
+
+    // Vertical grid: sixteenths faint, beats, bar lines strong.
+    for (let c = 0; c <= COLS; c++) {
+      const x = Math.round(plot.x + c * cw) + .5;
+      const bar = c % STEPS_PER_BAR === 0, beat = c % 4 === 0;
+      g.strokeStyle = bar ? C.strong : C.rule;
+      g.lineWidth = bar ? 1.5 : 1;
+      g.globalAlpha = bar || beat ? 1 : .45;
+      g.beginPath(); g.moveTo(x, plot.y); g.lineTo(x, plot.y + plot.h); g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    // Left gutter: pitch names or drum zones.
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    const fs = W < 480 ? 10 : 11;
+    if (drumView) {
+      g.font = `500 ${fs + 1}px ${BODY}`;
+      for (let z = 0; z < 4; z++) { g.fillStyle = C.ink; g.fillText(DRUM_ZONES[z], plot.x - 8, plot.y + plot.h - (z * 4 + 2) * rh); }
+    } else {
+      for (let r = 0; r < ROWS; r++) {
+        const tonic = r % scLen === 0, hot = hover && hover.inside && hover.r === r;
+        g.font = `${tonic || hot ? 500 : 400} ${fs}px ${MONO}`;
+        g.fillStyle = tonic || hot ? C.ink : C.muted;
+        g.fillText(noteLabel(midiFor(r, 0)), plot.x - 8, plot.y + (ROWS - 1 - r + .5) * rh);
+      }
+    }
+
+    // Top: bar numbers and beat ticks.
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    for (let c = 0; c < COLS; c += 4) {
+      const x = plot.x + c * cw;
+      if (c % STEPS_PER_BAR === 0) {
+        g.font = `600 13px ${BODY}`; g.fillStyle = C.ink;
+        g.fillText(`${c / STEPS_PER_BAR + 1}마디`, x + 5, plot.y - 12);
+      } else {
+        g.font = `400 10px ${MONO}`; g.fillStyle = C.muted;
+        g.fillText(`${(c % STEPS_PER_BAR) / 4 + 1}`, x + 4, plot.y - 12);
+      }
+    }
+
+    // Quantized note cells.
+    if (state.showNotes) {
+      for (const n of notes) {
+        const active = playing && curStep >= n.col && curStep < n.col + n.len;
+        g.globalAlpha = active ? .5 : .15;
+        g.fillStyle = C.pig[n.inst];
+        const x = plot.x + n.col * cw + 1.5, y = plot.y + (ROWS - 1 - n.row) * rh + rh * .16;
+        roundRect(x, y, n.len * cw - 3, rh * .68, Math.min(5, rh * .3));
+      }
+      g.globalAlpha = 1;
+    }
+
+    for (const s of state.strokes) drawStroke(s, now);
+    if (drawing) drawStroke(drawing, now);
+
+    // Ripples where notes sound.
+    particles = particles.filter(p => now - p.t0 < 650);
+    for (const p of particles) {
+      const a = (now - p.t0) / 650;
+      g.globalAlpha = (1 - a) * .7; g.strokeStyle = C.pig[p.inst]; g.lineWidth = 2;
+      g.beginPath(); g.arc(plot.x + p.x * cw, plot.y + (ROWS - 1 - p.r + .5) * rh, 5 + a * 20, 0, Math.PI * 2); g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    // Playhead.
+    if (playing && curStep >= 0 && ctx) {
+      const frac = Math.min(1, Math.max(0, (ctx.currentTime - curStepTime) / stepDur()));
+      const x = plot.x + (curStep + frac) * cw;
+      g.strokeStyle = C.ink; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(x, plot.y); g.lineTo(x, plot.y + plot.h); g.stroke();
+      g.fillStyle = C.ink;
+      g.beginPath(); g.moveTo(x - 5, plot.y - 7); g.lineTo(x + 5, plot.y - 7); g.lineTo(x, plot.y); g.closePath(); g.fill();
+    }
+
+    // Cursor feedback.
+    if (hover && hover.inside) {
+      if (state.tool === ERASER) {
+        g.strokeStyle = C.ink; g.lineWidth = 1; g.setLineDash([3, 3]);
+        g.beginPath(); g.arc(hover.px, hover.py, ERASE_R, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      } else if (hover.mouse) {
+        const label = state.tool === DRUM ? DRUM_ZONES[drumKind(hover.r)] : noteLabel(midiFor(hover.r, state.tool));
+        g.font = `500 11px ${MONO}`;
+        const tw = g.measureText(label).width + 12;
+        let lx = hover.px + 14, ly = hover.py - 26;
+        if (lx + tw > W - 4) lx = hover.px - 14 - tw;
+        if (ly < 2) ly = hover.py + 12;
+        g.fillStyle = C.ink; roundRect(lx, ly, tw, 18, 4);
+        g.fillStyle = C.sheet; g.textBaseline = 'middle'; g.fillText(label, lx + 6, ly + 9.5);
+      }
+    }
+  }
+
+  function roundRect(x, y, w, h, r) {
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h);
+    g.fill();
+  }
+
+  function drawStroke(s, now) {
+    const col = C.pig[s.inst], p = s.pts, base = W < 480 ? 4 : 5.5;
+    const flash = s.flash && now - s.flash < 260 ? 1 - (now - s.flash) / 260 : 0;
+    g.save();
+    g.strokeStyle = col; g.fillStyle = col; g.lineCap = 'round'; g.lineJoin = 'round';
+    let lw = base;
+    if (s.inst === 2) { lw = base * 2.4; g.globalAlpha = .5; }          // pad: a soft wash
+    if (s.inst === DRUM) g.setLineDash([.1, base * 2.2]);             // drums: a dotted rhythm line
+    if (flash) { g.shadowColor = col; g.shadowBlur = 16 * flash; }
+    if (p.length === 1) {
+      const [x, y] = toPx(p[0]);
+      g.beginPath(); g.arc(x, y, lw * 1.2, 0, Math.PI * 2); g.fill();
+    } else {
+      g.lineWidth = lw;
+      g.beginPath();
+      let [x0, y0] = toPx(p[0]); g.moveTo(x0, y0);
+      for (let i = 1; i < p.length - 1; i++) {
+        const [x1, y1] = toPx(p[i]), [x2, y2] = toPx(p[i + 1]);
+        g.quadraticCurveTo(x1, y1, (x1 + x2) / 2, (y1 + y2) / 2);
+      }
+      const [xl, yl] = toPx(p[p.length - 1]); g.lineTo(xl, yl);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  // ── Input ───────────────────────────────────────────────────
+  const ERASE_R = 16;
+  let lastCell = null, lastPreview = 0;
+
+  function pointerInfo(e) {
+    const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    const x = Math.min(1, Math.max(0, (px - plot.x) / plot.w)), y = Math.min(1, Math.max(0, (py - plot.y) / plot.h));
+    const inside = px >= plot.x && px <= plot.x + plot.w && py >= plot.y && py <= plot.y + plot.h;
+    return { px, py, x, y, inside, mouse: e.pointerType === 'mouse', ...cellOf({ x, y }) };
+  }
+
+  function preview(info) {
+    const key = info.c + ',' + info.r, now = performance.now();
+    if (key === lastCell || now - lastPreview < 45 || !ctx) return;
+    lastCell = key; lastPreview = now;
+    voice(state.tool, info.r, ctx.currentTime + .005, stepDur() * (state.tool === 2 ? 2 : 1), .55);
+  }
+
+  function eraseAt(info) {
+    for (let i = state.strokes.length - 1; i >= 0; i--) {
+      const s = state.strokes[i];
+      if (s.pts.some(p => { const [x, y] = toPx(p); return (x - info.px) ** 2 + (y - info.py) ** 2 < ERASE_R ** 2; })) {
+        state.strokes.splice(i, 1);
+        erasing.push({ s, i });
+        rebuild();
+      }
+    }
+  }
+
+  cv.addEventListener('pointerdown', e => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    ensureAudio();
+    cv.setPointerCapture(e.pointerId);
+    const info = pointerInfo(e); hover = info;
+    if (state.tool === ERASER) { erasing = []; eraseAt(info); return; }
+    drawing = { inst: state.tool, pts: [{ x: info.x, y: info.y }] };
+    lastCell = null; preview(info);
+  });
+  cv.addEventListener('pointermove', e => {
+    const info = pointerInfo(e); hover = info;
+    if (drawing) {
+      const last = drawing.pts[drawing.pts.length - 1], [lx, ly] = toPx(last);
+      if ((lx - info.px) ** 2 + (ly - info.py) ** 2 > 6) { drawing.pts.push({ x: info.x, y: info.y }); preview(info); }
+    } else if (erasing) eraseAt(info);
+  });
+  const endPointer = () => {
+    if (drawing) {
+      state.strokes.push(drawing);
+      state.history.push({ t: 'add', s: drawing });
+      drawing = null; dismissExample(); rebuild();
+    }
+    if (erasing) { if (erasing.length) state.history.push({ t: 'erase', items: erasing }); erasing = null; }
+  };
+  cv.addEventListener('pointerup', endPointer);
+  cv.addEventListener('pointercancel', endPointer);
+  cv.addEventListener('pointerleave', () => { if (!drawing && !erasing) hover = null; });
+
+  function undo() {
+    const h = state.history.pop(); if (!h) return;
+    if (h.t === 'add') { const i = state.strokes.lastIndexOf(h.s); if (i >= 0) state.strokes.splice(i, 1); }
+    else if (h.t === 'erase') { for (let k = h.items.length - 1; k >= 0; k--) state.strokes.splice(h.items[k].i, 0, h.items[k].s); }
+    else if (h.t === 'clear') state.strokes = h.strokes;
+    rebuild();
+  }
+  function clearAll() {
+    if (!state.strokes.length) return;
+    state.history.push({ t: 'clear', strokes: state.strokes });
+    state.strokes = []; dismissExample(); rebuild();
+  }
+  function dismissExample() { if (state.example) { state.example = false; hintEl.hidden = true; } }
+
+  // ── Controls ────────────────────────────────────────────────
+  const playBtn = document.getElementById('play'), hintEl = document.getElementById('hint');
+  const pigWrap = document.getElementById('pigments'), eraserBtn = document.getElementById('eraser');
+  const keySel = document.getElementById('key'), scaleSel = document.getElementById('scale');
+  const bpmIn = document.getElementById('bpm'), bpmOut = document.getElementById('bpmOut');
+
+  INST.forEach((inst, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pig'; b.setAttribute('role', 'radio'); b.dataset.inst = i;
+    b.style.setProperty('--c', `var(${inst.pig})`);
+    b.innerHTML = `<span class="sw"></span><span><span class="pn">${inst.name}</span><span class="pi">${inst.label}</span></span><kbd>${i + 1}</kbd>`;
+    b.addEventListener('click', () => setTool(i));
+    pigWrap.appendChild(b);
+  });
+  NOTE_NAMES.forEach((n, i) => keySel.add(new Option(n, i)));
+  SCALES.forEach((s, i) => scaleSel.add(new Option(s.name, i)));
+
+  function setTool(t) {
+    state.tool = t;
+    pigWrap.querySelectorAll('.pig').forEach(b => {
+      const on = +b.dataset.inst === t;
+      b.setAttribute('aria-checked', on); b.tabIndex = on || (t === ERASER && b.dataset.inst === '0') ? 0 : -1;
+    });
+    eraserBtn.setAttribute('aria-pressed', t === ERASER);
+    cv.classList.toggle('erase', t === ERASER);
+  }
+  pigWrap.addEventListener('keydown', e => {
+    const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const t = ((state.tool < 0 ? 0 : state.tool) + d + INST.length) % INST.length;
+    setTool(t); pigWrap.children[t].focus();
+  });
+
+  playBtn.addEventListener('click', toggle);
+  eraserBtn.addEventListener('click', () => setTool(state.tool === ERASER ? 0 : ERASER));
+  document.getElementById('undo').addEventListener('click', undo);
+  document.getElementById('clear').addEventListener('click', clearAll);
+  document.getElementById('showNotes').addEventListener('change', e => { state.showNotes = e.target.checked; });
+  keySel.addEventListener('change', () => { state.key = +keySel.value; updateReadout(); });
+  scaleSel.addEventListener('change', () => { state.scale = +scaleSel.value; updateReadout(); });
+  bpmIn.addEventListener('input', () => {
+    state.bpm = +bpmIn.value; bpmOut.value = state.bpm; updateReadout();
+    if (ctx) delay.delayTime.setTargetAtTime(3 * stepDur(), ctx.currentTime, .05);
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('select, input, button') && e.code === 'Space') return;
+    if (e.target.closest('select, input')) return;
+    if (e.code === 'Space') { e.preventDefault(); toggle(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^[1-5]$/.test(e.key)) setTool(+e.key - 1);
+    else if (e.key.toLowerCase() === 'e') setTool(ERASER);
+  });
+
+  function updateReadout() {
+    const el = document.getElementById('readout');
+    const secs = (COLS * stepDur()).toFixed(1);
+    el.innerHTML =
+      `<span>♩ = <b>${state.bpm}</b></span>` +
+      `<span><b>${NOTE_NAMES[state.key]} ${SCALES[state.scale].name}</b></span>` +
+      `<span>음표 <b>${notes.length}</b>개</span>` +
+      `<span>2마디 · <b>${secs}</b>초마다 반복</span>`;
+  }
+
+  // ── Example drawing (shown on first load) ───────────────────
+  function example() {
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) - .5;
+    const cx = c => (c + .5) / COLS, ry = r => (ROWS - 1 - r + .5) / ROWS;
+    const line = (inst, anchors, wob = .16) => {
+      const P = anchors.map(([c, r]) => ({ x: cx(c), y: ry(r) })), pts = [];
+      for (let i = 0; i < P.length - 1; i++) {
+        const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || P[i + 1];
+        for (let k = 0; k < 14; k++) {
+          const t = k / 14, t2 = t * t, t3 = t2 * t;
+          const cr = (a, b, c, d) => .5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+          pts.push({ x: cr(p0.x, p1.x, p2.x, p3.x), y: cr(p0.y, p1.y, p2.y, p3.y) + rnd() * wob / ROWS });
+        }
+      }
+      pts.push(P[P.length - 1]);
+      return { inst, pts };
+    };
+    const dot = (inst, c, r) => ({ inst, pts: [{ x: cx(c), y: ry(r) }] });
+    return [
+      line(2, [[0, 5], [15, 5]]), line(2, [[0, 7], [15, 7]]),
+      line(2, [[16, 4], [31, 4]]), line(2, [[16, 6], [31, 6]]),
+      line(3, [[0, 0], [2, 0]]), line(3, [[6, 0], [7, 0]]), line(3, [[8, 3], [10, 3]]), line(3, [[12, 2], [13, 2]]),
+      line(3, [[16, 4], [18, 4]]), line(3, [[22, 4], [23, 4]]), line(3, [[24, 3], [26, 3]]), line(3, [[28, 1], [29, 1]]),
+      line(0, [[0, 7], [2, 8], [4, 9], [6, 8], [7, 7], [9, 7], [10, 9], [12, 10], [14, 9]], .12),
+      line(0, [[16, 10], [18, 11], [20, 12], [22, 11], [24, 9], [26, 8], [28, 7], [30, 7]], .12),
+      ...[[3, 12], [5, 13], [11, 12], [19, 14], [21, 13], [27, 12], [29, 11]].map(([c, r]) => dot(1, c, r)),
+      ...[0, 8, 10, 16, 24, 26].map(c => dot(DRUM, c, 1)),
+      ...[4, 12, 20, 28].map(c => dot(DRUM, c, 5)),
+      line(DRUM, [[0, 9], [8, 10], [16, 9], [24, 10], [31, 9]], .1),
+    ];
+  }
+
+  state.strokes = example();
+  setTool(0); rebuild(); resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
