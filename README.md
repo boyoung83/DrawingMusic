@@ -1,7 +1,7 @@
 # 그림악보
 
 물감(악기)을 골라 캔버스에 선을 그리면, 그 그림이 2마디짜리 반복 악보로 연주되는 웹앱.
-HTML 파일 하나, 외부 라이브러리·음원 파일 없이 Canvas + Web Audio API만 사용한다.
+Canvas + Web Audio API로 소리를 직접 합성한다(음원 파일 없음). 빌드 도구 없음.
 
 ## 매핑 규칙
 
@@ -17,6 +17,15 @@ HTML 파일 하나, 외부 라이브러리·음원 파일 없이 Canvas + Web Au
 
 음계: 메이저/마이너 펜타토닉, 평조, 장음계, 자연단음계, 도리안, 블루스, 미야코부시. 으뜸음 12개 중 선택.
 
+## MP3로 저장
+
+왼쪽 **내보내기**에서 반복 횟수(1·2·4·8회)를 고르고 **MP3로 저장**.
+
+- 재생 엔진을 `OfflineAudioContext`로 한 번 더 돌려 앱에서 들리는 소리 그대로 렌더링하고, 끝에 잔향이 사라지는 꼬리 2.5초를 붙인다.
+- 피크를 약 -1 dBFS로 정규화한 뒤 [lamejs](https://github.com/zhuker/lamejs)로 192 kbps 스테레오 MP3 인코딩.
+- 인코더(`vendor/lame.min.js`, 약 150KB)는 처음 저장할 때만 불러온다. 외부 서버로 아무것도 보내지 않는다.
+- 파일 이름 예: `drawingmusic_C-major-pentatonic_92bpm_x4.mp3`
+
 ## 단축키
 
 `Space` 재생/정지 · `1`–`5` 악기 · `E` 지우개 · `⌘Z`/`Ctrl+Z` 되돌리기
@@ -27,3 +36,7 @@ HTML 파일 하나, 외부 라이브러리·음원 파일 없이 Canvas + Web Au
 배포: **Settings → Pages → Deploy from a branch → `main` / `(root)`**.
 
 그림은 어디에도 저장하지 않는다(새로고침하면 사라짐).
+
+## 라이선스 고지
+
+MP3 인코딩에 [LAME](https://lame.sourceforge.io/)의 JavaScript 포팅인 lamejs 1.2.1을 수정 없이 별도 파일로 사용한다(LGPL-3.0, `vendor/LICENSE-lamejs`).

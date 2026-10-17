@@ -117,6 +117,15 @@ kbd {
 .switch { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; font-size: 13.5px; }
 .switch input { width: 16px; height: 16px; accent-color: var(--ink); margin: 0 6px; }
 
+.export-row { display: flex; gap: 8px; padding: 0 10px; }
+.export-btn {
+  flex: 1; padding: 6px 12px; border: 0; border-radius: 6px; cursor: pointer;
+  background: var(--ink); color: var(--sheet); font-size: 13px; font-weight: 600;
+}
+.export-btn:disabled { opacity: .55; cursor: progress; }
+.export-status { margin: 6px 10px 0; min-height: 1.45em; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 .legend { margin: 0; padding: 12px 10px 0; border-top: 1px solid var(--rule); display: grid; gap: 6px; font-size: 12px; }
 .legend div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; }
 .legend dt { color: var(--muted); }
@@ -156,6 +165,8 @@ canvas.erase { cursor: cell; }
   .tool span { display: none; }
   .tool { grid-template-columns: auto; }
   .switch span { font-size: 13px; }
+  .export-row { padding: 0; }
+  .export-status { margin: 4px 0 0; }
 }
 @media (prefers-reduced-motion: reduce) { .play { transition: none; } }
 </style>
@@ -206,6 +217,20 @@ canvas.erase { cursor: cell; }
           <label class="switch" for="showNotes"><input id="showNotes" type="checkbox" checked><span>음표 칸 보기</span></label>
         </div>
       </div>
+      <div>
+        <p class="group-label">내보내기</p>
+        <div class="export-row">
+          <label class="sr-only" for="loops">반복 횟수</label>
+          <select id="loops">
+            <option value="1">1회 반복</option>
+            <option value="2">2회 반복</option>
+            <option value="4" selected>4회 반복</option>
+            <option value="8">8회 반복</option>
+          </select>
+          <button id="exportBtn" class="export-btn" type="button">MP3로 저장</button>
+        </div>
+        <p class="export-status" id="exportStatus" role="status" aria-live="polite"></p>
+      </div>
       <dl class="legend">
         <div><dt>가로</dt><dd>시간. 2마디, 16분음표 32칸을 반복합니다</dd></div>
         <div><dt>세로</dt><dd>음높이. 고른 음계의 음에만 맞춰집니다</dd></div>
@@ -218,7 +243,7 @@ canvas.erase { cursor: cell; }
     <section class="sheet" aria-label="악보 캔버스">
       <div class="canvas-box">
         <canvas id="score" aria-label="그림을 그리면 음표가 되는 캔버스"></canvas>
-        <div class="hint" id="hint">예시 그림입니다. ▶ 눌러 들어보고, 덧그리거나 지우고 시작하세요</div>
+        <div class="hint" id="hint">예시 그림 · ▶로 듣고, 덧그리거나 지워 보세요</div>
       </div>
       <div class="readout" id="readout"></div>
     </section>
@@ -241,14 +266,14 @@ canvas.erase { cursor: cell; }
   ];
   const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
   const SCALES = [
-    { name: '메이저 펜타토닉', iv: [0, 2, 4, 7, 9] },
-    { name: '마이너 펜타토닉', iv: [0, 3, 5, 7, 10] },
-    { name: '평조 (국악)',     iv: [0, 2, 5, 7, 9] },
-    { name: '장음계',          iv: [0, 2, 4, 5, 7, 9, 11] },
-    { name: '자연단음계',      iv: [0, 2, 3, 5, 7, 8, 10] },
-    { name: '도리안',          iv: [0, 2, 3, 5, 7, 9, 10] },
-    { name: '블루스',          iv: [0, 3, 5, 6, 7, 10] },
-    { name: '미야코부시',      iv: [0, 1, 5, 7, 8] },
+    { name: '메이저 펜타토닉', slug: 'major-pentatonic', iv: [0, 2, 4, 7, 9] },
+    { name: '마이너 펜타토닉', slug: 'minor-pentatonic', iv: [0, 3, 5, 7, 10] },
+    { name: '평조 (국악)',     slug: 'pyeongjo',         iv: [0, 2, 5, 7, 9] },
+    { name: '장음계',          slug: 'major',            iv: [0, 2, 4, 5, 7, 9, 11] },
+    { name: '자연단음계',      slug: 'natural-minor',    iv: [0, 2, 3, 5, 7, 8, 10] },
+    { name: '도리안',          slug: 'dorian',           iv: [0, 2, 3, 5, 7, 9, 10] },
+    { name: '블루스',          slug: 'blues',            iv: [0, 3, 5, 6, 7, 10] },
+    { name: '미야코부시',      slug: 'miyako-bushi',     iv: [0, 1, 5, 7, 8] },
   ];
   const DRUM_ZONES = ['킥', '스네어', '하이햇', '오픈햇'];
   const drumKind = r => Math.min(3, Math.floor(r / 4));
@@ -333,23 +358,18 @@ canvas.erase { cursor: cell; }
   }
 
   // ── Audio engine (plain Web Audio, no samples) ──────────────
-  let ctx = null, master, delay, busses = [], noiseBuf, reverb;
-
-  function ensureAudio() {
-    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    ctx = new AC();
+  // One engine per context: the live AudioContext plays, an OfflineAudioContext renders exports.
+  function makeEngine(ctx) {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 4;
-    master = ctx.createGain(); master.gain.value = .8;
+    const master = ctx.createGain(); master.gain.value = .8;
     master.connect(comp).connect(ctx.destination);
 
-    reverb = ctx.createConvolver();
+    const reverb = ctx.createConvolver();
     reverb.buffer = impulse(2.6);
     reverb.connect(master);
 
-    delay = ctx.createDelay(2);
+    const delay = ctx.createDelay(2);
     delay.delayTime.value = 3 * stepDur(); // dotted eighth
     const fb = ctx.createGain(); fb.gain.value = .32;
     const dlp = ctx.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
@@ -357,98 +377,109 @@ canvas.erase { cursor: cell; }
     const dOut = ctx.createGain(); dOut.gain.value = .6;
     dlp.connect(dOut).connect(master);
 
-    busses = INST.map(i => {
+    const busses = INST.map(i => {
       const b = ctx.createGain(); b.gain.value = i.gain; b.connect(master);
       if (i.delay) { const s = ctx.createGain(); s.gain.value = i.delay; b.connect(s).connect(delay); }
       const r = ctx.createGain(); r.gain.value = i.rev; b.connect(r).connect(reverb);
       return b;
     });
 
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+
+    function impulse(sec) {
+      const len = Math.floor(ctx.sampleRate * sec), buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      }
+      return buf;
+    }
+
+    const osc = (type, f, t, stop) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(stop); return o; };
+    const gain = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
+
+    function vPiano(f, t, d, v, bus) {
+      const end = t + d + 1.6, g = gain(0), lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(5200, t); lp.frequency.exponentialRampToValueAtTime(900, t + .8);
+      osc('triangle', f, t, end).connect(lp);
+      osc('sine', f * 2, t, end).connect(gain(.28)).connect(lp);
+      lp.connect(g).connect(bus);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(.34 * v, t + .006);
+      g.gain.setTargetAtTime(.1 * v, t + .006, .3);
+      g.gain.setTargetAtTime(0, t + Math.max(d, .12), .12);
+    }
+    function vMarimba(f, t, d, v, bus) {
+      const end = t + 1.4, g = gain(0), g2 = gain(0);
+      osc('sine', f, t, end).connect(g).connect(bus);
+      osc('sine', f * 3.99, t, end).connect(g2).connect(bus);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.42 * v, t + .003); g.gain.setTargetAtTime(0, t + .003, .2);
+      g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(.12 * v, t + .002); g2.gain.setTargetAtTime(0, t + .002, .025);
+    }
+    function vPad(f, t, d, v, bus) {
+      const end = t + d + 2.2, g = gain(0), lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = .6;
+      for (const cents of [-9, 0, 8]) {
+        const o = osc('sawtooth', f, t, end); o.detune.value = cents; o.connect(lp);
+      }
+      lp.connect(g).connect(bus);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(.055 * v, t + .22);
+      g.gain.setValueAtTime(.055 * v, t + d);
+      g.gain.setTargetAtTime(0, t + d, .4);
+    }
+    function vBass(f, t, d, v, bus) {
+      const end = t + d + .8, g = gain(0), lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.Q.value = 5;
+      lp.frequency.setValueAtTime(1900, t); lp.frequency.setTargetAtTime(380, t, .09);
+      osc('sawtooth', f, t, end).connect(lp);
+      osc('sine', f / 2, t, end).connect(gain(.6)).connect(lp);
+      lp.connect(g).connect(bus);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(.32 * v, t + .008);
+      g.gain.setTargetAtTime(.22 * v, t + .008, .15);
+      g.gain.setTargetAtTime(0, t + Math.max(d - .02, .05), .05);
+    }
+    function noise(t, dur) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t); s.stop(t + dur); return s; }
+    function vDrum(kind, t, v, bus) {
+      if (kind === 0) {
+        const o = osc('sine', 160, t, t + .5), g = gain(0);
+        o.frequency.exponentialRampToValueAtTime(42, t + .13);
+        o.connect(g).connect(bus);
+        g.gain.setValueAtTime(.95 * v, t); g.gain.exponentialRampToValueAtTime(.001, t + .42);
+      } else if (kind === 1) {
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = .7;
+        const g = gain(0); noise(t, .25).connect(bp).connect(g).connect(bus);
+        g.gain.setValueAtTime(.5 * v, t); g.gain.exponentialRampToValueAtTime(.001, t + .19);
+        const g2 = gain(0); osc('triangle', 190, t, t + .15).connect(g2).connect(bus);
+        g2.gain.setValueAtTime(.3 * v, t); g2.gain.exponentialRampToValueAtTime(.001, t + .09);
+      } else {
+        const open = kind === 3, hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7200;
+        const g = gain(0); noise(t, open ? .45 : .08).connect(hp).connect(g).connect(bus);
+        g.gain.setValueAtTime((open ? .2 : .24) * v, t); g.gain.exponentialRampToValueAtTime(.001, t + (open ? .38 : .05));
+      }
+    }
+    function voice(inst, row, t, d, v = 1) {
+      const bus = busses[inst];
+      if (inst === DRUM) return vDrum(drumKind(row), t, v, bus);
+      [vPiano, vMarimba, vPad, vBass][inst](mtof(midiFor(row, inst)), t, d, v, bus);
+    }
+
+    return { voice, delay };
   }
 
-  function impulse(sec) {
-    const len = Math.floor(ctx.sampleRate * sec), buf = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-    }
-    return buf;
+  let ctx = null, engine = null;
+  function ensureAudio() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+    engine = makeEngine(ctx);
   }
-
-  const osc = (type, f, t, stop) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(stop); return o; };
-  const gain = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
-
-  function vPiano(f, t, d, v, bus) {
-    const end = t + d + 1.6, g = gain(0), lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(5200, t); lp.frequency.exponentialRampToValueAtTime(900, t + .8);
-    osc('triangle', f, t, end).connect(lp);
-    osc('sine', f * 2, t, end).connect(gain(.28)).connect(lp);
-    lp.connect(g).connect(bus);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(.34 * v, t + .006);
-    g.gain.setTargetAtTime(.1 * v, t + .006, .3);
-    g.gain.setTargetAtTime(0, t + Math.max(d, .12), .12);
-  }
-  function vMarimba(f, t, d, v, bus) {
-    const end = t + 1.4, g = gain(0), g2 = gain(0);
-    osc('sine', f, t, end).connect(g).connect(bus);
-    osc('sine', f * 3.99, t, end).connect(g2).connect(bus);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.42 * v, t + .003); g.gain.setTargetAtTime(0, t + .003, .2);
-    g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(.12 * v, t + .002); g2.gain.setTargetAtTime(0, t + .002, .025);
-  }
-  function vPad(f, t, d, v, bus) {
-    const end = t + d + 2.2, g = gain(0), lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = .6;
-    for (const cents of [-9, 0, 8]) {
-      const o = osc('sawtooth', f, t, end); o.detune.value = cents; o.connect(lp);
-    }
-    lp.connect(g).connect(bus);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(.055 * v, t + .22);
-    g.gain.setValueAtTime(.055 * v, t + d);
-    g.gain.setTargetAtTime(0, t + d, .4);
-  }
-  function vBass(f, t, d, v, bus) {
-    const end = t + d + .8, g = gain(0), lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.Q.value = 5;
-    lp.frequency.setValueAtTime(1900, t); lp.frequency.setTargetAtTime(380, t, .09);
-    osc('sawtooth', f, t, end).connect(lp);
-    osc('sine', f / 2, t, end).connect(gain(.6)).connect(lp);
-    lp.connect(g).connect(bus);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(.32 * v, t + .008);
-    g.gain.setTargetAtTime(.22 * v, t + .008, .15);
-    g.gain.setTargetAtTime(0, t + Math.max(d - .02, .05), .05);
-  }
-  function noise(t, dur) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t); s.stop(t + dur); return s; }
-  function vDrum(kind, t, v, bus) {
-    if (kind === 0) {
-      const o = osc('sine', 160, t, t + .5), g = gain(0);
-      o.frequency.exponentialRampToValueAtTime(42, t + .13);
-      o.connect(g).connect(bus);
-      g.gain.setValueAtTime(.95 * v, t); g.gain.exponentialRampToValueAtTime(.001, t + .42);
-    } else if (kind === 1) {
-      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = .7;
-      const g = gain(0); noise(t, .25).connect(bp).connect(g).connect(bus);
-      g.gain.setValueAtTime(.5 * v, t); g.gain.exponentialRampToValueAtTime(.001, t + .19);
-      const g2 = gain(0); osc('triangle', 190, t, t + .15).connect(g2).connect(bus);
-      g2.gain.setValueAtTime(.3 * v, t); g2.gain.exponentialRampToValueAtTime(.001, t + .09);
-    } else {
-      const open = kind === 3, hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7200;
-      const g = gain(0); noise(t, open ? .45 : .08).connect(hp).connect(g).connect(bus);
-      g.gain.setValueAtTime((open ? .2 : .24) * v, t); g.gain.exponentialRampToValueAtTime(.001, t + (open ? .38 : .05));
-    }
-  }
-  function voice(inst, row, t, d, v = 1) {
-    if (!ctx) return;
-    const bus = busses[inst];
-    if (inst === DRUM) return vDrum(drumKind(row), t, v, bus);
-    [vPiano, vMarimba, vPad, vBass][inst](mtof(midiFor(row, inst)), t, d, v, bus);
-  }
+  const voice = (...args) => engine && engine.voice(...args);
 
   // ── Transport ───────────────────────────────────────────────
   let playing = false, step = 0, nextTime = 0, timer = null, vq = [], curStep = -1, curStepTime = 0;
@@ -774,7 +805,7 @@ canvas.erase { cursor: cell; }
   scaleSel.addEventListener('change', () => { state.scale = +scaleSel.value; updateReadout(); });
   bpmIn.addEventListener('input', () => {
     state.bpm = +bpmIn.value; bpmOut.value = state.bpm; updateReadout();
-    if (ctx) delay.delayTime.setTargetAtTime(3 * stepDur(), ctx.currentTime, .05);
+    if (engine) engine.delay.delayTime.setTargetAtTime(3 * stepDur(), ctx.currentTime, .05);
   });
 
   document.addEventListener('keydown', e => {
@@ -796,6 +827,99 @@ canvas.erase { cursor: cell; }
       `<span>음표 <b>${notes.length}</b>개</span>` +
       `<span>2마디 · <b>${secs}</b>초마다 반복</span>`;
   }
+
+  // ── MP3 export ──────────────────────────────────────────────
+  // Renders the loop offline through the same engine, then encodes with lamejs (loaded on first use).
+  const SAMPLE_RATE = 44100, TAIL = 2.5, KBPS = 192;
+  const exportBtn = document.getElementById('exportBtn'), loopsSel = document.getElementById('loops');
+  const statusEl = document.getElementById('exportStatus');
+  const setStatus = msg => { statusEl.textContent = msg; };
+  let lame = null;
+
+  function loadLame() {
+    return lame ||= new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      const fail = () => { lame = null; s.remove(); reject(new Error('lamejs')); };
+      s.src = 'vendor/lame.min.js';
+      s.onload = () => (window.lamejs ? resolve(window.lamejs) : fail());
+      s.onerror = fail;
+      document.head.appendChild(s);
+    });
+  }
+
+  function renderLoops(loops) {
+    const sd = stepDur(), dur = loops * COLS * sd + TAIL;
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const oac = new OAC(2, Math.ceil(dur * SAMPLE_RATE), SAMPLE_RATE);
+    const eng = makeEngine(oac);
+    for (let l = 0; l < loops; l++)
+      for (let s = 0; s < COLS; s++)
+        for (const n of events[s]) eng.voice(n.inst, n.row, (l * COLS + s) * sd, n.len * sd);
+    return oac.startRendering();
+  }
+
+  async function encodeMp3(lamejs, buf, onProgress) {
+    const L = buf.getChannelData(0), R = buf.getChannelData(1);
+    let peak = 0;
+    for (let i = 0; i < L.length; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
+    const k = peak > 0 ? Math.min(4, .89 / peak) : 1; // normalise to about -1 dBFS
+    const toPcm = (src, from, to) => {
+      const out = new Int16Array(to - from);
+      for (let i = from; i < to; i++) {
+        const v = Math.max(-1, Math.min(1, src[i] * k));
+        out[i - from] = v < 0 ? v * 0x8000 : v * 0x7fff;
+      }
+      return out;
+    };
+    const enc = new lamejs.Mp3Encoder(2, buf.sampleRate, KBPS), chunks = [];
+    const FRAME = 1152, BATCH = FRAME * 200;
+    for (let i = 0; i < L.length; i += BATCH) {
+      const end = Math.min(L.length, i + BATCH), l = toPcm(L, i, end), r = toPcm(R, i, end);
+      for (let j = 0; j < l.length; j += FRAME) {
+        const out = enc.encodeBuffer(l.subarray(j, j + FRAME), r.subarray(j, j + FRAME));
+        if (out.length) chunks.push(out);
+      }
+      onProgress(end / L.length);
+      await new Promise(res => setTimeout(res)); // keep the page responsive between batches
+    }
+    const last = enc.flush();
+    if (last.length) chunks.push(last);
+    return new Blob(chunks, { type: 'audio/mpeg' });
+  }
+
+  // ASCII only: some browsers drop a non-ASCII download name and save as "download".
+  function fileName(loops) {
+    const key = NOTE_NAMES[state.key].replace('♯', 's').replace('♭', 'b');
+    return `drawingmusic_${key}-${SCALES[state.scale].slug}_${state.bpm}bpm_x${loops}.mp3`;
+  }
+
+  function download(blob, name) {
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  async function exportMp3() {
+    if (!notes.length) { setStatus('저장할 음표가 없습니다. 먼저 그림을 그려 주세요.'); return; }
+    const loops = +loopsSel.value;
+    exportBtn.disabled = true;
+    setStatus('소리를 만드는 중…');
+    try {
+      const [lamejs, buf] = await Promise.all([loadLame(), renderLoops(loops)]);
+      const blob = await encodeMp3(lamejs, buf, f => setStatus(`MP3로 변환 중… ${Math.round(f * 100)}%`));
+      download(blob, fileName(loops));
+      setStatus(`저장했습니다 · ${buf.duration.toFixed(1)}초, ${(blob.size / 1048576).toFixed(1)}MB`);
+    } catch (err) {
+      console.error(err);
+      setStatus(err.message === 'lamejs'
+        ? 'MP3 변환기를 불러오지 못했습니다. 연결을 확인하고 다시 시도해 주세요.'
+        : '파일을 만들지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      exportBtn.disabled = false;
+    }
+  }
+  exportBtn.addEventListener('click', exportMp3);
 
   // ── Example drawing (shown on first load) ───────────────────
   function example() {
