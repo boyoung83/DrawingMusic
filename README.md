@@ -33,7 +33,8 @@ Canvas + Web Audio API로 소리를 직접 합성한다(음원 파일 없음). �
 ## 실행
 
 빌드 없음. `index.html`을 브라우저로 열면 된다.
-배포: **Settings → Pages → Deploy from a branch → `main` / `(root)`**.
+배포: GitHub Pages가 `gh-pages` 브랜치를 그대로 서비스한다 → https://boyoung83.github.io/DrawingMusic/
+`main`을 바꾼 뒤 `git push origin main:gh-pages`로 반영한다. (`.nojekyll`로 Jekyll 빌드는 건너뜀)
 
 그림은 어디에도 저장하지 않는다(새로고침하면 사라짐).
 
